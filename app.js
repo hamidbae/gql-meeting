@@ -4,7 +4,7 @@ require('dotenv/config');
 const userAuth = require('./middleware/userAuth')
 const adminAuth = require('./middleware/adminAuth')
 const { graphqlHTTP } = require('express-graphql')
-const schema = require('./graphql/schema')
+const schema = require('./schema/schema')
 
 const imageRouter = require('./route/user-image')
 
