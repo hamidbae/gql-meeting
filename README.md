@@ -1,5 +1,5 @@
-### .env
-.env berisikan <br>
+# .env
+
 * **DB_CONNECT** url mongodb
 * **USER_SECRET_KEY** secret key untuk membuat dan validasi user token jwt 
 * **ADMIN_SECRET_KEY** secret key untuk membuat dan validasi admin token jwt
