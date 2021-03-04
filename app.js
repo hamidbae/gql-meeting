@@ -29,6 +29,6 @@ app.use('/graphql', graphqlHTTP({
 
 mongoose.connect(process.env.DB_CONNECT, { useUnifiedTopology: true, useNewUrlParser: true})
     .then((result) => {
-        app.listen(4002)
+        app.listen(process.env.PORT || 4002)
     })
 
