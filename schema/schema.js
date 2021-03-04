@@ -4,11 +4,13 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const validator = require('validator')
 const cron = require('node-cron')
+const cloudinary = require('cloudinary')
 
 const sendMail = require('../utils/mail')
 const Room = require('../models/room')
 const User = require('../models/user')
 const Admin = require('../models/admin')
+
 
 const {
     GraphQLObjectType,
@@ -39,7 +41,7 @@ const RoomType = new GraphQLObjectType({
         usersCheckIn: { 
             type: new GraphQLList(UserType),
             resolve(parent, args){
-                return parent.participants.map(userId => {
+                return parent.usersCheckIn.map(userId => {
                     // return _.find(users, { id: userId })
                     return User.findById(userId)
                 })
@@ -81,7 +83,7 @@ const AdminType = new GraphQLObjectType({
 const UserAuthDataType = new GraphQLObjectType({
     name: 'UserAuth',
     fields: () => ({
-        userId: { type: GraphQLString },
+        userId: { type: GraphQLID },
         token: { type: GraphQLString }
     })
 })
@@ -89,7 +91,7 @@ const UserAuthDataType = new GraphQLObjectType({
 const AdminAuthDataType = new GraphQLObjectType({
     name: 'AdminAuth',
     fields: () => ({
-        adminId: { type: GraphQLString },
+        adminId: { type: GraphQLID },
         token: { type: GraphQLString }
     })
 })
@@ -102,7 +104,7 @@ const RootQuery = new GraphQLObjectType({
             args: { id: { type: GraphQLID }},
             resolve(parent, args){
                 // return _.find(rooms, { id: args.id })
-                Room.findById(args.id)
+                return Room.findById(args.id)
             }
         },
         rooms: {
@@ -114,15 +116,17 @@ const RootQuery = new GraphQLObjectType({
         user: {
             type: UserType,
             args: { id: { type: GraphQLID }},
-            resolve(parent, args){
-                // return _.find(users, { id: args.id })
-                return User.findById(args.id)
+            async resolve(parent, args){
+                const user = await User.findById(args.id)
+                return {id: user._id, email: user.email, imageUrl: user.imageUrl}
             }
         },
         users: {
             type: new GraphQLList(UserType),
-            resolve(parent, args){
-                return User.find()
+            async resolve(parent, args){
+                const test = await User.find({}, { email: 1, imageUrl: 1 })
+                console.log(test)
+                return test
             }
         },
         admin: {
@@ -338,8 +342,8 @@ const Mutation = new GraphQLObjectType({
         addUserCheckIn: {
             type: RoomType,
             args: {
-                roomId: { type: GraphQLString },
-                userId: { type: GraphQLString }
+                roomId: { type: GraphQLID },
+                userId: { type: GraphQLID }
             },
             async resolve(parent, args, req){
                 if(!req.adminAuth){
@@ -358,7 +362,7 @@ const Mutation = new GraphQLObjectType({
                     error.code = 301
                     throw error    
                 }
-                if(!room.usersCheckIn.includes(args.userId)){
+                if(room.usersCheckIn.includes(args.userId)){
                     const error = new Error('This person checked in')
                     error.code = 301
                     throw error    
@@ -370,7 +374,7 @@ const Mutation = new GraphQLObjectType({
                     throw error
                 }
 
-                room.participants.push(args.userId)
+                room.usersCheckIn.push(args.userId)
 
                 // send email after check in
                 let subject = 'User Checkin Meeting'
@@ -393,7 +397,7 @@ const Mutation = new GraphQLObjectType({
                 email: { type: GraphQLString },
                 password: { type: GraphQLString },
                 imageUrl: { type: GraphQLString },
-                cloudinary_id: { type: GraphQLString }
+                cloudinary_id: { type: GraphQLID }
             },
             async resolve(parent, args) {
                 if(!validator.isEmail(args.email)){
@@ -415,7 +419,62 @@ const Mutation = new GraphQLObjectType({
                     cloudinary_id: args.cloudinary_id
                 })
 
-                return user.save()
+                await user.save()
+                return { id: user._id, email: user.email, imageUrl: user.imageUrl }
+            }
+        },
+        deleteUser: {
+            type: UserType,
+            async resolve(parent, args, req) {
+                if(!req.userAuth){
+                    const error = new Error('Not authenticated!')
+                    error.code = 401
+                    throw error
+                }
+                let user = await User.findById(req.userId)
+                await cloudinary.uploader.destroy(user.cloudinary_id)
+                await user.remove()
+
+                return { id: user._id, email: user.email }
+            }
+        },
+        updateUser: {
+            type: UserType,
+            args: {
+                email: { type: GraphQLString },
+                password: { type: GraphQLString },
+                imageUrl: { type: GraphQLString },
+                cloudinary_id: { type: GraphQLID }
+            },
+            async resolve(parent, args, req) {
+                if(!req.userAuth){
+                    const error = new Error('Not authenticated!')
+                    error.code = 401
+                    throw error
+                }
+                if(!validator.isEmail(args.email)){
+                    const error = new Error('Email not valid')
+                    error.code = 301
+                    throw error  
+                }
+                if(args.password.length < 6){
+                    const error = new Error('Min password length 6')
+                    error.code = 301
+                    throw error
+                }
+
+                let user = await User.findById(req.userId)
+                
+                if(args.cloudinary_id !== user.cloudinary_id){
+                    await cloudinary.uploader.destroy(user.cloudinary_id)
+                }
+                user.email = args.email || user.email
+                user.password = args.password ? await bcrypt.hash(args.password, 12): user.password
+                user.imageUrl = args.imageUrl || user.imageUrl
+                user.cloudinary_id = args.cloudinary_id || user.cloudinary_id             
+
+                await user.save()
+                return { id: user._id, email: user.email, imageUrl: user.imageUrl }
             }
         },
         createAdmin: {
