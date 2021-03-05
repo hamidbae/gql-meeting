@@ -400,6 +400,12 @@ const Mutation = new GraphQLObjectType({
                 cloudinary_id: { type: GraphQLID }
             },
             async resolve(parent, args) {
+                const isRegistered = await User.findOne({ email: args.email })
+                if(isRegistered){
+                    const error = new Error('Email has been registered.')
+                    error.code = 401
+                    throw error
+                }
                 if(!validator.isEmail(args.email)){
                     const error = new Error('Email not valid')
                     error.code = 301
