@@ -491,6 +491,12 @@ const Mutation = new GraphQLObjectType({
                 password: { type: GraphQLString },
             },
             async resolve(parent, args){
+                const isRegistered = await Admin.findOne({ email: args.email })
+                if(isRegistered){
+                    const error = new Error('Email has been registered.')
+                    error.code = 401
+                    throw error
+                }
                 if(!validator.isEmail(args.email)){
                     const error = new Error('Email not valid')
                     error.code = 301
